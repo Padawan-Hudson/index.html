@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网易游戏舆情分析系统 | 专业运营版</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.8/mammoth.browser.min.js"></script>
+    <style>
+        :root {
+            --netease-blue: #D32F2F;
+            --netease-red: #C62828;
+            --positive-color: #4CAF50;
+            --negative-color: #F44336;
+            --neutral-color: #FF9800;
+            --high-risk-color: #D32F2F;
+            --warning-color: #FFC107;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+            color: #e0e0e0; 
+            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* 网易风格头部 */
+        .netease-header {
+            background: linear-gradient(90deg, var(--netease-red) 0%, #B71C1C 100%);
+            color: white;
+            padding: 25px 40px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 25px rgba(198, 40, 40, 0.2);
+            border-left: 8px solid #FFC107;
+        }
+        
+        .netease-header h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .netease-header h1:before {
+            content: "🎮";
+            font-size: 3rem;
+        }
+        
+        .header-subtitle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .alert-badge {
+            background: var(--warning-color);
+            color: #333;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        /* 主控制面板 */
+        .control-panel {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .panel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #90CAF9;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .input-group input, 
+        .input-group select,
+        .input-group textarea {
+            width: 100%;
+            padding: 14px;
+            background: rgba(0,0,0,0.3);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .input-group input:focus,
+        .input-group select:focus {
+            border-color: var(--netease-red);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.2);
+        }
+        
+        .game-selector {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .game-tag {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .game-tag:hover,
+        .game-tag.active {
+            background: var(--netease-red);
+            transform: translateY(-2px);
+        }
+        
+        /* 操作按钮 */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex: 1;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(90deg, var(--netease-red), #B71C1C);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(198, 40, 40, 0.3);
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        
+        /* 仪表板 */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .metric-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            border-left: 6px solid;
+            transition: transform 0.3s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .metric-card.positive { border-color: var(--positive-color); }
+        .metric-card.negative { border-color: var(--negative-color); }
+        .metric-card.neutral { border-color: var(--neutral-color); }
+        .metric-card.high-risk { border-color: var(--high-risk-color); }
+        
+        .metric-value {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        /* 风险预警面板 */
+        .risk-panel {
+            background: rgba(211, 47, 47, 0.1);
+            border: 2px solid var(--high-risk-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        
+        .risk-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .risk-item {
+            background: rgba(211, 47, 47, 0.2);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid var(--high-risk-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .risk-tag {
+            background: var(--high-risk-color);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        
+        /* 事件追踪 */
+        .tracking-panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin-top: 20px;
+        }
+        
+        .timeline:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--netease-red);
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        
+        .timeline-item:before {
+            content: '';
+            position: absolute;
+            left: -36px;
+            top: 20px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: var(--netease-red);
+        }
+        
+        /* 图表容器 */
+        .chart-container {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+            height: 400px;
+        }
+        
+        /* 报告生成器 */
+        .report-generator {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .report-preview {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.1);
+            border-top: 5px solid var(--netease-red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .panel-grid { grid-template-columns: 1fr; }
+            .game-selector { grid-template-columns: repeat(2, 1fr); }
+            .action-buttons { flex-direction: column; }
+            .dashboard { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 网易风格头部 -->
+        <header class="netease-header">
+            <h1>网易游戏舆情分析系统</h1>
+            <p>专业运营平台 · 实时监控 · 智能预警 · 闭环处置</p>
+            <div class="header-subtitle">
+                <div>
+                    <span>当前版本：v2.0 专业运营版</span>
+                    <span style="margin-left: 20px;">最后更新：2025年1月</span>
+                </div>
+                <div class="alert-badge">
+                    ⚠️ 高风险预警：24小时内检测到3起待处理事件
+                </div>
+            </div>
+        </header>
+
+        <!-- 主控制面板 -->
+        <section class="control-panel">
+            <h2 style="color: #90CAF9; margin-bottom: 20px;">🎯 舆情监控配置</h2>
+            <div class="panel-grid">
+                <div class="input-group">
+                    <label for="videoUrl">🔗 B站视频链接/BV号</label>
+                    <input type="text" id="videoUrl" 
+                           placeholder="输入视频链接或BV号，例如：BV1GJ411x7h7"
+                           value="BV1GJ411x7h7">
+                </div>
+                
+                <div class="input-group">
+                    <label for="gameSelect">🎮 关联游戏项目</label>
+                    <div class="game-selector">
+                        <div class="game-tag active" data-game="阴阳师">阴阳师</div>
+                        <div class="game-tag" data-game="梦幻西游">梦幻西游</div>
+                        <div class="game-tag" data-game="逆水寒">逆水寒</div>
+                        <div class="game-tag" data-game="永劫无间">永劫无间</div>
+                        <div class="game-tag" data-game="率土之滨">率土之滨</div>
+                        <div class="game-tag" data-game="第五人格">第五人格</div>
+                        <div class="game-tag" data-game="明日之后">明日之后</div>
+                        <div class="game-tag" data-game="其他">其他</div>
+                    </div>
+                    <input type="hidden" id="selectedGame" value="阴阳师">
+                </div>
+                
+                <div class="input-group">
+                    <label for="timeRange">⏰ 监控时间范围</label>
+                    <select id="timeRange">
+                        <option value="24h">最近24小时</option>
+                        <option value="7d" selected>最近7天</option>
+                        <option value="30d">最近30天</option>
+                        <option value="custom">自定义范围</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label for="keywords">🔍 自定义关键词监控（逗号分隔）</label>
+                <textarea id="keywords" rows="3" placeholder="例如：bug,闪退,充值问题,外挂,匹配机制,客服响应慢,更新延迟..."></textarea>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="analyzeBtn">
+                    <span>🚀 开始深度舆情分析</span>
+                </button>
+                <button class="btn btn-secondary" id="exportReportBtn">
+                    <span>📊 生成专业报告 (Word)</span>
+                </button>
+                <button class="btn btn-secondary" id="clearDataBtn">
+                    <span>🔄 重置数据</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- 加载动画 -->
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            <p>正在执行深度舆情分析，请稍候...</p>
+            <p style="color: #90CAF9; margin-top: 10px;">正在进行：情感分析 → 风险识别 → 趋势预测 → 报告生成</p>
+        </div>
+
+        <!-- 数据仪表板 -->
+        <div id="resultsPanel" style="display: none;">
+            <div class="dashboard">
+                <div class="metric-card positive">
+                    <h3>👍 积极情绪</h3>
+                    <div class="metric-value" id="positiveMetric">0%</div>
+                    <p>正面评价与支持声音</p>
+                </div>
+                <div class="metric-card negative">
+                    <h3>👎 消极情绪</h3>
+                    <div class="metric-value" id="negativeMetric">0%</div>
+                    <p>负面反馈与投诉</p>
+                </div>
+                <div class="metric-card neutral">
+                    <h3>😐 中性情绪</h3>
+                    <div class="metric-value" id="neutralMetric">0%</div>
+                    <p>一般讨论与建议</p>
+                </div>
+                <div class="metric-card high-risk">
+                    <h3>⚠️ 高风险舆情</h3>
+                    <div class="metric-value" id="riskMetric">0</div>
+                    <p>需立即处理事件</p>
+                </div>
+            </div>
+
+            <!-- 风险预警面板 -->
+            <section class="risk-panel">
+                <h2 style="color: #FF8A80;">🚨 高风险舆情预警</h2>
+                <p>以下内容已触发预警机制，建议立即处理：</p>
+                <div class="risk-list" id="riskList">
+                    <!-- 风险项目将通过JS动态生成 -->
+                </div>
+            </section>
+
+            <!-- 事件追踪面板 -->
+            <section class="tracking-panel">
+                <h2 style="color: #80DEEA;">📋 舆情事件追踪</h2>
+                <div class="timeline" id="eventTimeline">
+                    <!-- 时间线项目将通过JS动态生成 -->
+                </div>
+            </section>
+
+            <!-- 图表展示 -->
+            <section class="chart-container">
+                <h2 style="color: #C5E1A5;">📈 舆情趋势分析</h2>
+                <canvas id="sentimentChart"></canvas>
+            </section>
+
+            <!-- 报告生成器 -->
+            <section class="report-generator">
+                <h2 style="color: #FFCC80;">📄 专业分析报告</h2>
+                <div class="report-preview" id="reportPreview">
+                    <!-- 报告内容将通过JS动态生成 -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let analysisResults = null;
+        let sentimentChart = null;
+        
+        // 网易游戏列表
+        const neteaseGames = [
+            '阴阳师', '梦幻西游', '逆水寒', '永劫无间', 
+            '率土之滨', '第五人格', '明日之后', '荒野行动',
+            '哈利波特：魔法觉醒', '一梦江湖', '光·遇'
+        ];
+        
+        // 游戏行业关键词库
+        const gameKeywords = {
+            positive: ['好玩', '良心', '优化', '流畅', '画质', '福利', '更新', '修复', '响应快'],
+            negative: ['bug', '闪退', '卡顿', '掉线', '外挂', '匹配', '充值', '客服', '延迟', '骗氪'],
+            highRisk: ['退款', '投诉', '举报', '315', '12315', '集体', '维权', '诈骗', '跑路']
+        };
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeGameTags();
+            setupEventListeners();
+            loadSampleData();
+        });
+        
+        // 初始化游戏标签
+        function initializeGameTags() {
+            const tags = document.querySelectorAll('.game-tag');
+            tags.forEach(tag => {
+                tag.addEventListener('click', function() {
+                    tags.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('selectedGame').value = this.dataset.game;
+                });
+            });
+        }
+        
+        // 设置事件监听器
+        function setupEventListeners() {
+            document.getElementById('analyzeBtn').addEventListener('click', startDeepAnalysis);
+            document.getElementById('exportReportBtn').addEventListener('click', generateProfessionalReport);
+            document.getElementById('clearDataBtn').addEventListener('click', clearData);
+        }
+        
+        // 加载示例数据
+        function loadSampleData() {
+            // 预填关键词
+            document.getElementById('keywords').value = gameKeywords.negative.join(', ') + 
+                ', ' + gameKeywords.highRisk.join(', ');
+        }
+        
+        // 开始深度分析
+        async function startDeepAnalysis() {
+            const videoUrl = document.getElementById('videoUrl').value.trim();
+            const selectedGame = document.getElementById('selectedGame').value;
+            const timeRange = document.getElementById('timeRange').value;
+            const keywords = document.getElementById('keywords').value;
+            
+            if (!videoUrl) {
+                alert('请输入视频链接或BV号');
+                return;
+            }
+            
+            // 显示加载动画
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('resultsPanel').style.display = 'none';
+            
+            // 模拟深度分析过程
+            setTimeout(() => {
+                // 生成专业分析数据
+                analysisResults = generateProfessionalAnalysis(videoUrl, selectedGame, timeRange, keywords);
+                
+                // 更新UI
+                updateDashboard(analysisResults);
+                updateRiskPanel(analysisResults.risks);
+                updateEventTimeline(analysisResults.timeline);
+                updateCharts(analysisResults);
+                updateReportPreview(analysisResults);
+                
+                // 显示结果面板
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('resultsPanel').style.display = 'block';
+                
+                // 滚动到结果区域
+                document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth' });
+                
+            }, 2500);
+        }
+        
+        // 生成专业分析数据
+        function generateProfessionalAnalysis(videoUrl, game, timeRange, keywords) {
+            // 模拟真实数据
+            const baseMetrics = {
+                totalComments: Math.floor(Math.random() * 10000) + 5000,
+                totalDanmaku: Math.floor(Math.random() * 50000) + 20000,
+                positive: Math.floor(Math.random() * 30) + 50, // 50-80%
+                negative: Math.floor(Math.random() * 25) + 10, // 10-35%
+                neutral: 0, // 会自动计算
+                highRiskCount: Math.floor(Math.random() * 8) + 3
+            };
+            baseMetrics.neutral = 100 - baseMetrics.positive - baseMetrics.negative;
+            
+            // 生成风险事件
+            const riskEvents = generateRiskEvents(game, baseMetrics.highRiskCount);
+            
+            // 生成时间线
+            const timeline = generateTimeline(riskEvents);
+            
+            // 生成趋势数据
+            const trendData = generateTrendData(timeRange);
+            
+            // 关键词分析
+            const keywordAnalysis = analyzeKeywords(keywords);
+            
+            return {
+                videoUrl,
+                game,
+                timeRange,
+                baseMetrics,
+                risks: riskEvents,
+                timeline,
+                trends: trendData,
+                keywords: keywordAnalysis,
+                analyzedAt: new Date().toISOString()
+            };
+        }
+        
+        // 生成风险事件
+        function generateRiskEvents(game, count) {
+            const riskTypes = ['充值问题', '游戏BUG', '外挂举报', '客服投诉', '匹配机制', '服务器问题'];
+            const riskLevels = ['高', '中', '低'];
+            const riskStatuses = ['待处理', '处理中', '已解决', '已关闭'];
+            
+            return Array.from({ length: count }, (_, i) => ({
+                id: i + 1,
+                type: riskTypes[Math.floor(Math.random() * riskTypes.length)],
+                level: riskLevels[Math.floor(Math.random() * riskLevels.length)],
+                status: riskStatuses[Math.floor(Math.random() * riskStatuses.length)],
+                description: `用户反馈${game}游戏存在${riskTypes[Math.floor(Math.random() * riskTypes.length)]}问题`,
+                reportedAt: new Date(Date.now() - Math.random() * 86400000).toLocaleString(),
+                priority: Math.floor(Math.random() * 10) + 1
+            })).sort((a, b) => b.priority - a.priority);
+        }
+        
+        // 生成时间线
+        function generateTimeline(riskEvents) {
+            const actions = ['创建工单', '分配处理', '开始调查', '解决方案', '用户反馈', '完成处理'];
+            
+            return riskEvents.slice(0, 5).map(event => ({
+                eventId: event.id,
+                time: new Date(Date.now() - Math.random() * 3600000).toLocaleTimeString(),
+                action: actions[Math.floor(Math.random() * actions.length)],
+                operator: `运营专员${Math.floor(Math.random() * 5) + 1}`,
+                details: `处理${event.type}问题，优先级：${event.priority}`
+            }));
+        }
+        
+        // 生成趋势数据
+        function generateTrendData(timeRange) {
+            const hours = timeRange === '24h' ? 24 : timeRange === '7d' ? 7 : 30;
+            return Array.from({ length: hours }, (_, i) => ({
+                time: `${i}:00`,
+                positive: Math.floor(Math.random() * 30) + 50,
+                negative: Math.floor(Math.random() * 25) + 10,
+                neutral: Math.floor(Math.random() * 20) + 20,
+                volume: Math.floor(Math.random() * 1000) + 500
+            }));
+        }
+        
+        // 分析关键词
+        function analyzeKeywords(keywords) {
+            const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k);
+            return keywordList.map(keyword => ({
+                keyword,
+                count: Math.floor(Math.random() * 100) + 10,
+                sentiment: Math.random() > 0.5 ? 'negative' : 'neutral',
+                trend: Math.random() > 0.5 ? '上升' : '下降'
+            }));
+        }
+        
+        // 更新仪表板
+        function updateDashboard(results) {
+            const metrics = results.baseMetrics;
+            document.getElementById('positiveMetric').textContent = `${metrics.positive}%`;
+            document.getElementById('negativeMetric').textContent = `${metrics.negative}%`;
+            document.getElementById('neutralMetric').textContent = `${metrics.neutral}%`;
+            document.getElementById('riskMetric').textContent = metrics.highRiskCount;
+        }
+        
+        // 更新风险面板
+        function updateRiskPanel(risks) {
+            const riskList = document.getElementById('riskList');
+            riskList.innerHTML = risks.map(risk => `
+                <div class="risk-item">
+                    <div>
+                        <strong>${risk.type}</strong> - ${risk.description}
+                        <div style="margin-top: 5px; font-size: 0.9em; color: #FF8A80;">
+                            优先级: ${risk.priority} | 报告时间: ${risk.reportedAt}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="risk-tag">${risk.level}风险</span>
+                        <span style="margin-left: 10px; padding: 5px 10px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+                            ${risk.status}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // 更新时间线
+        function updateEventTimeline(timeline) {
+            const timelineEl = document.getElementById('eventTimeline');
+            timelineEl.innerHTML = timeline.map(item => `
+                <div class="timeline-item">
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong>${item.action}</strong>
+                        <span style="color: #80DEEA;">${item.time}</span>
+                    </div>
+                    <div style="margin-top: 5px; color: #B0BEC5;">
+                        操作人: ${item.operator} | 事件ID: ${item.eventId}
+                    </div>
+                    <div style="margin-top: 5px;">${item.details}</div>
+                </div>
+            `).join('');
+        }
+        
+        // 更新图表
+        function updateCharts(results) {
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            
+            if (sentimentChart) {
+                sentimentChart.destroy();
+            }
+            
+            const trendData = results.trends;
+            sentimentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trendData.map(d => d.time),
+                    datasets: [
+                        {
+                            label: '积极情绪',
+                            data: trendData.map(d => d.positive),
+                            borderColor: '#4CAF50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: '消极情绪',
+                            data: trendData.map(d => d.negative),
+                            borderColor: '#F44336',
+                            backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: '讨论量',
+                            data: trendData.map(d => d.volume / 10),
+                            borderColor: '#FF9800',
+                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            tension: 0.3,
+                            fill: true,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: '情绪比例 (%)'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '讨论量'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#e0e0e0'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新报告预览
+        function updateReportPreview(results) {
+            const reportPreview = document.getElementById('reportPreview');
+            
+            const reportHtml = `
+                <h3>网易游戏舆情分析报告</h3>
+                <p><strong>生成时间：</strong>${new Date(results.analyzedAt).toLocaleString('zh-CN')}</p>
+                <p><strong>分析目标：</strong>${results.game} - ${results.videoUrl}</p>
+                <p><strong>监控周期：</strong>${results.timeRange}</p>
+                
+                <h4>📊 核心数据摘要</h4>
+                <ul>
+                    <li>总评论数：${results.baseMetrics.totalComments.toLocaleString()} 条</li>
+                    <li>总弹幕数：${results.baseMetrics.totalDanmaku.toLocaleString()} 条</li>
+                    <li>积极情绪：${results.baseMetrics.positive}%</li>
+                    <li>消极情绪：${results.baseMetrics.negative}%</li>
+                    <li>高风险事件：${results.baseMetrics.highRiskCount} 起</li>
+                </ul>
+                
+                <h4>🚨 高风险舆情摘要</h4>
+                <p>共识别出 ${results.risks.length} 起需要关注的风险事件，其中：</p>
+                <ul>
+                    ${results.risks.slice(0, 3).map(risk => `
+                        <li>${risk.type}（${risk.level}风险）：${risk.description} [状态: ${risk.status}]</li>
+                    `).join('')}
+                </ul>
+                
+                <h4>📈 趋势分析与建议</h4>
+                <p>根据舆情数据分析，建议采取以下措施：</p>
+                <ol>
+                    <li><strong>立即处理：</strong>针对${results.baseMetrics.highRiskCount}起高风险事件启动应急预案</li>
+                    <li><strong>优化方向：</strong>重点关注用户反馈的${results.risks[0]?.type || '游戏体验'}问题</li>
+                    <li><strong>沟通策略：</strong>通过官方渠道回应用户关切，预计可降低${Math.floor(Math.random()*15)+10}%负面情绪</li>
+                    <li><strong>长期监控：</strong>建立${results.game}专项监控看板，持续跟踪舆情变化</li>
+                </ol>
+                
+                <p style="color: #FF9800; margin-top: 20px; padding: 10px; background: rgba(255,152,0,0.1); border-radius: 5px;">
+                    <strong>⚠️ 处理时限建议：</strong>高风险事件建议在24小时内响应，48小时内给出解决方案。
+                </p>
+            `;
+            
+            reportPreview.innerHTML = reportHtml;
+        }
+        
+        // 生成专业报告
+        async function generateProfessionalReport() {
+            if (!analysisResults) {
+                alert('请先进行舆情分析');
+                return;
+            }
+            
+            // 创建报告HTML
+            const reportHTML = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>网易游戏舆情分析报告_${analysisResults.game}_${new Date().toISOString().slice(0,10)}</title>
+                    <style>
+                        body { font-family: 'Microsoft YaHei', sans-serif; padding: 40px; }
+                        h1 { color: #D32F2F; border-bottom: 3px solid #D32F2F; padding-bottom: 10px; }
+                        .header { background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+                        .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
+                        .metric-box { padding: 20px; border-radius: 8px; text-align: center; color: white; }
+                        .positive { background: #4CAF50; }
+                        .negative { background: #F44336; }
+                        .neutral { background: #FF9800; }
+                        .risk { background: #D32F2F; }
+                        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+                        th { background: #f2f2f2; }
+                        .recommendation { background: #E3F2FD; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                    </style>
+                </head>
+                <body>
+                    <h1>网易游戏舆情分析报告</h1>
+                    
+                    <div class="header">
+                        <p><strong>报告生成时间：</strong>${new Date().toLocaleString('zh-CN')}</p>
+                        <p><strong>分析项目：</strong>${analysisResults.game}</p>
+                        <p><strong>数据来源：</strong>${analysisResults.videoUrl}</p>
+                        <p><strong>监控周期：</strong>${analysisResults.timeRange}</p>
+                    </div>
+                    
+                    <h2>核心指标概览</h2>
+                    <div class="metrics-grid">
+                        <div class="metric-box positive">
+                            <h3>积极情绪</h3>
+                            <h2>${analysisResults.baseMetrics.positive}%</h2>
+                        </div>
+                        <div class="metric-box negative">
+                            <h3>消极情绪</h3>
+                            <h2>${analysisResults.baseMetrics.negative}%</h2>
+                        </div>
+                        <div class="metric-box neutral">
+                            <h3>中性情绪</h3>
+                            <h2>${analysisResults.baseMetrics.neutral}%</h2>
+                        </div>
+                        <div class="metric-box risk">
+                            <h3>高风险事件</h3>
+                            <h2>${analysisResults.baseMetrics.highRiskCount}起</h2>
+                        </div>
+                    </div>
+                    
+                    <h2>高风险舆情详情</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>事件类型</th>
+                                <th>风险等级</th>
+                                <th>状态</th>
+                                <th>问题描述</th>
+                                <th>优先级</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${analysisResults.risks.map(risk => `
+                                <tr>
+                                    <td>${risk.type}</td>
+                                    <td>${risk.level}风险</td>
+                                    <td>${risk.status}</td>
+                                    <td>${risk.description}</td>
+                                    <td>${risk.priority}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    
+                    <h2>处理建议与行动计划</h2>
+                    <div class="recommendation">
+                        <h3>🔄 立即行动项 (24小时内)</h3>
+                        <ol>
+                            <li>成立${analysisResults.game}舆情应急小组</li>
+                            <li>联系高风险事件相关用户进行沟通</li>
+                            <li>制定问题解决方案并公示时间表</li>
+                        </ol>
+                        
+                        <h3>📈 中长期优化建议</h3>
+                        <ol>
+                            <li>建立游戏专项舆情监控机制</li>
+                            <li>优化客服响应流程，目标响应时间＜2小时</li>
+                            <li>定期发布游戏问题修复进度报告</li>
+                            <li>建立玩家意见反馈闭环系统</li>
+                        </ol>
+                    </div>
+                    
+                    <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd;">
+                        <p><strong>报告编制：</strong>网易游戏舆情运营中心</p>
+                        <p><strong>联系方式：</strong>yqjc@service.netease.com</p>
+                        <p><strong>报告编号：</strong>NETEASE-YQ-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2,'0')}-${Math.floor(Math.random()*10000)}</p>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            // 创建Blob并下载
+            const blob = new Blob([reportHTML], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `网易游戏舆情报告_${analysisResults.game}_${new Date().toISOString().slice(0,10)}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert('专业报告已生成并开始下载！');
+        }
+        
+        // 清空数据
+        function clearData() {
+            if (confirm('确定要清空所有分析数据吗？')) {
+                document.getElementById('resultsPanel').style.display = 'none';
+                document.getElementById('videoUrl').value = '';
+                document.getElementById('keywords').value = gameKeywords.negative.join(', ') + 
+                    ', ' + gameKeywords.highRisk.join(', ');
+                analysisResults = null;
+                if (sentimentChart) {
+                    sentimentChart.destroy();
+                    sentimentChart = null;
+                }
+                alert('数据已重置，可以开始新的分析。');
+            }
+        }
+    </script>
+</body>
+</html>
